@@ -1,31 +1,47 @@
 import { neon } from "@neondatabase/serverless";
 
-/**
- * Optional cloud persistence. Returns a query function only when a Postgres
- * connection string is present (injected automatically when a Neon store is
- * connected to the project in Vercel). Without it, callers fall back to the
- * on-device store and the app keeps working.
- */
+export const hasDatabase = !!process.env.DATABASE_URL;
 
-const connectionString =
-  process.env.POSTGRES_URL ||
-  process.env.DATABASE_URL ||
-  process.env.POSTGRES_PRISMA_URL ||
-  "";
+export function getDb() {
+  if (!hasDatabase) throw new Error("DATABASE_URL not configured");
+  return neon(process.env.DATABASE_URL!);
+}
 
-export const hasDatabase = connectionString.length > 0;
-
-export const sql = hasDatabase ? neon(connectionString) : null;
-
-let ensured = false;
 export async function ensureSchema() {
-  if (!sql || ensured) return;
+  if (!hasDatabase) return;
+  const sql = getDb();
   await sql`
-    CREATE TABLE IF NOT EXISTS learner_progress (
-      learner_id TEXT PRIMARY KEY,
-      state JSONB NOT NULL,
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    CREATE TABLE IF NOT EXISTS kopedu_progress (
+      user_id    TEXT PRIMARY KEY,
+      data       JSONB NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `;
-  ensured = true;
+}
+
+export async function ensureChatTable() {
+  if (!hasDatabase) return;
+  const sql = getDb();
+  await sql`
+    CREATE TABLE IF NOT EXISTS kopedu_chat (
+      user_id    TEXT PRIMARY KEY,
+      data       JSONB NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+}
+
+export async function ensureUsersTable() {
+  if (!hasDatabase) return;
+  const sql = getDb();
+  await sql`
+    CREATE TABLE IF NOT EXISTS kopedu_users (
+      id            TEXT PRIMARY KEY,
+      email         TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      first_name    TEXT DEFAULT '',
+      last_name     TEXT DEFAULT '',
+      created_at    TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
 }
